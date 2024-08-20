@@ -1,102 +1,475 @@
 # disaster-image-classification
-. Introduction
-Disaster classification is the systematic categorization of events based on their nature, severity, and impact. It enables effective response strategies by grouping disasters into types such as natural, technological, or complex emergencies. Natural disasters include earthquakes, hurricanes, and floods, stemming from natural processes. Technological disasters result from human-made systems failing, like industrial accidents or infrastructure collapses. Complex emergencies involve multiple factors, such as armed conflict exacerbating food shortages or disease outbreaks. Understanding these classifications aids in preparedness, mitigation, and response efforts, ultimately minimizing human suffering and facilitating recovery in the aftermath of catastrophic events.
-    Our investigation focuses on several prominent CNN architectures: VGG19(accuracy:90.98%), ResNet50(accuracy:91.86%), ResNet101, VGG19(90.98%), DenseNet201, InceptionResNetV2, InceptionV3(accuracy:83.64%), DenseNet121, and EfficientNetB1(93.99%). Each architecture possesses distinct characteristics in terms of depth, complexity, and computational efficiency, making them suitable candidates for comparison in our study.
- VGG16 is another useful design based on its convolutional model consisting of 13 convolutional layers followed by 3 layers. Despite its simplicity, VGG16 performs excellently on many types of image classification..We also explore deeper architectures such as ResNet50 and ResNet101, it introduced novel concept of residual learning to address Vanishing gradient problem. These residual connections help uncover deep patterns while maintaining computational efficiency model.InceptionResNetV2 and InceptionV3 architectures integrate inception modules with additional computational optimizations, resulting in networks capable of capturing intricate spatial hierarchies in images.
-2. Related Works and Trends in Disaster Classification : Related tasks in damage classification cover many methods and methods in all research. Some studies focus on using traditional learning techniques, such as support vector machine  (SVM) or random forest, to classify damage based on satellite images or sensor data. Others are exploring the application of deep learning techniques such as convolutional neural networks (CNN) (e.g. ResNet, Inception) or networks specifically designed for multiple inference and classification. A combination of different types of classification to improve classification accuracy. There are also educational changes where previous training methods are adapted to new disaster missions..
-Additionally, research delves into ensemble methods that combine multiple classifiers to improve classification accuracy. Transfer learning techniques, where pre-trained models are adapted to new disaster classification tasks, are also prevalent. Moreover, studies explore the integration of geographic information systems (GIS) data with machine learning models for spatially explicit disaster classification.
-Furthermore, there's a growing interest in leveraging interdisciplinary approaches, incorporating data from social media, crowd-sourced information, and other non-traditional sources to enhance disaster classification accuracy and timeliness. Overall, the field is dynamic, with ongoing efforts to refine algorithms, explore new data sources, and improve disaster response capabilities.
-  Modification of CNN architectures, ranging from traditional models like  VGG to state-of-the-art designs such as ResNet, Xception. This trend reflects a transition towards increasingly complex and deep networks, often incorporating residual connections to enhance performance metrics.
-Overall, the literature underscores the diverse approaches employed in designing Me detection systems, ranging from single CNN models to hybrid architectures combining multiple CNNs with complementary classifiers or techniques.
-3. Proposed Work
+!pip install tensorflow_hub
+!pip install tensorflow_datasets
+!pip install lime
+!pip install colorama
+!pip install opencv-python
+!git clone https://github.com/samson6460/tf_keras_gradcamplusplus.git ./assets/tf_keras_gradcamplusplus
 
- In this work, we propose to use VGG-16 as well as well-known convolutional neural network (CNN) architectures, including  ResNet50, VGG19, DenseNet201, InceptionV3, and EfficientNetB1, to analyze the damage distribution image., for the detection of disaster classification images. These models have demonstrated exceptional performance in image classification tasks and offer promising potential for image classification. We aim to leverage the unique architectural characteristics of each model and compare their performance in disaster detection.
-3.1. Using VGG-16
-VGG-16 is another influential convolutional neural network (CNN) architecture that has made significant contributions to the field of image classification. Let's explore its architecture in more detail:
+import os
+import sys
+import re
+import random
+import shutil
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import tensorflow as tf
+import tensorflow_hub as hub
+
+from colorama import Fore, Style
+from PIL import Image, ImageFile
+from keras.callbacks import EarlyStopping
+from keras.layers import Dense, Dropout, GlobalAveragePooling2D, Identity, InputLayer, Rescaling
+from keras.models import Sequential
+from lime import lime_image
+from skimage.segmentation import mark_boundaries
+from sklearn.metrics import confusion_matrix
+from tensorflow.keras.models import Model
+from tensorflow.keras.applications.resnet50 import ResNet50
+from keras.applications.inception_v3 import InceptionV3
+from tensorflow.keras.applications import VGG19
+from tensorflow.keras.applications.efficientnet import EfficientNetB0
+from tensorflow.keras.applications.efficientnet import EfficientNetB7
+from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2B0
+from tensorflow.keras.applications.efficientnet_v2 import EfficientNetV2L
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from glob import glob
+from assets.tf_keras_gradcamplusplus.utils import preprocess_image
+from assets.tf_keras_gradcamplusplus.gradcam import grad_cam, grad_cam_plus
+from IPython.display import clear_output
+
+clear_output()
+print(Fore.GREEN + u'\u2713 ' + 'Successfully downloaded dependencies.')
+print(Style.RESET_ALL)
+
+class IgnorePrints:
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
+
+        #Global Variables
+        DATASETS = ['disaster_images', 'medic']
+
+DATASET = 'disaster_images'
+# DATASET = 'medic'
+
+CLASSES = []
+
+SEED = 68765
+
+TRAIN_SPLIT = 0.7
+VALID_SPLIT = 0.2
+TEST_SPLIT = 0.1
+
+IMAGE_SHAPE_2D = (224, 224)
+IMAGE_SHAPE_3D = (224, 224, 3)
+
+SOURCE_DIRECTORY = './assets/disaster_data/'
+REFACTORED_DIRECTORY = './assets/refactored_data/'
+TRAIN_DIRECTORY = './assets/refactored_data/train/'
+VALID_DIRECTORY = './assets/refactored_data/valid/'
+TEST_DIRECTORY = './assets/refactored_data/test/'
+
+EPOCHS = 1000
+PATIENCE = 20
+BATCH_SIZE = 128
+
+# LEARNING_RATE = 0.01
+# LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0001
+
+BASE_MODEL = ResNet50(weights='imagenet', include_top=False, input_shape=IMAGE_SHAPE_3D)
+PREPROCESSING_METHOD = preprocessing_function=tf.keras.applications.resnet50.preprocess_input
+
+# BASE_MODEL = InceptionV3(weights='imagenet', include_top=False, input_shape=IMAGE_SHAPE_3D)
+# PREPROCESSING_METHOD = preprocessing_function=tf.keras.applications.inception_v3.preprocess_input
+
+# BASE_MODEL = VGG19(weights='imagenet', include_top=False, input_shape=IMAGE_SHAPE_3D)
+# PREPROCESSING_METHOD = preprocessing_function=tf.keras.applications.vgg19.preprocess_input
+
+# BASE_MODEL = EfficientNetB0(weights='imagenet', include_top=False, input_shape=IMAGE_SHAPE_3D)
+# PREPROCESSING_METHOD = preprocessing_function=tf.keras.applications.efficientnet.preprocess_input
+
+# BASE_MODEL = EfficientNetB7(weights='imagenet', include_top=False, input_shape=IMAGE_SHAPE_3D)
+# PREPROCESSING_METHOD = preprocessing_function=tf.keras.applications.efficientnet.preprocess_input
+
+# BASE_MODEL = EfficientNetV2B0(weights='imagenet', include_top=False, input_shape=IMAGE_SHAPE_3D)
+# PREPROCESSING_METHOD = preprocessing_function=tf.keras.applications.efficientnet_v2.preprocess_input
+
+# BASE_MODEL = EfficientNetV2L(weights='imagenet', include_top=False, input_shape=IMAGE_SHAPE_3D)
+# PREPROCESSING_METHOD = preprocessing_function=tf.keras.applications.efficientnet_v2.preprocess_input
+
+# BASE_MODEL = hub.KerasLayer('https://tfhub.dev/sayakpaul/vit_b32_fe/1')
+# PREPROCESSING_METHOD = None
+
+# OPTIMIZER = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
+OPTIMIZER = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
+
+#helper variables
+#load dataset
+def load_dataset():
+  global CLASSES
+  assert DATASET in DATASETS, f'Input string \'{DATASET}\' must be one of following: {DATASETS}.'
+
+
+  def _load_disaster_images_dataset():
+    !git clone https://github.com/tariqshaban/disaster-classification-with-xai.git
+    !mv -v ./disaster-classification-with-xai/assets/* ./assets
+    !rm -rf disaster-classification-with-xai
+
+  def _load_medic_dataset():
+    !wget https://crisisnlp.qcri.org/data/medic/MEDIC.tar.gz
+    !mkdir ./Medic
+    !tar -xzvf ./MEDIC.tar.gz -C ./Medic
+
+    !mkdir -p ./assets/disaster_data/_raw
+    !mkdir ./assets/disaster_data/_metadata/
+    !mv ./Medic/data/* ./assets/disaster_data/_raw
+    !mv ./Medic/MEDIC_train.tsv ./assets/disaster_data/_metadata/
+    !mv ./Medic/MEDIC_dev.tsv ./assets/disaster_data/_metadata/
+    !mv ./Medic/MEDIC_test.tsv ./assets/disaster_data/_metadata/
+    !rm -rf ./Medic
+
+    tsv_files = !find ./assets/disaster_data/_metadata -name '*.tsv'
+
+    dfs = []
+    for file in tsv_files:
+        dfs.append(pd.read_csv(file, sep='\t'))
+    df = pd.concat(dfs, ignore_index=True)
+    df = df[df['informative'] == 'informative']
+    df = df[['disaster_types', 'image_path']]
+    df['image_path'] = df['image_path'].str.split('/', n=1, expand=True)[1]
+
+    for index, row in df.iterrows():
+        image_path = row['image_path']
+        class_name = row['disaster_types']
+        destination_folder = f'./assets/disaster_data/{class_name}'
+        if not os.path.exists(destination_folder):
+            os.makedirs(destination_folder)
+        print(f'./assets/disaster_data/_raw/{image_path}')
+        print(f'{destination_folder}/{os.path.basename(image_path)}')
+        shutil.move(f'./assets/disaster_data/_raw/{image_path}', f'{destination_folder}/{os.path.basename(image_path)}')
+
+    !rm -rf ./assets/disaster_data/_raw
+    !rm -rf ./assets/disaster_data/_metadata
+
+  if DATASET == 'disaster_images':
+    _load_disaster_images_dataset()
+  elif DATASET == 'medic':
+    _load_medic_dataset()
+
+  CLASSES = os.listdir('./assets/disaster_data')
+
+  Prime Dataset
+  def prime_dataset():
+  if os.path.exists(REFACTORED_DIRECTORY):
+    shutil.rmtree(REFACTORED_DIRECTORY)
+
+  # Read Each Image With its Class Label
+  images = []
+  folders=CLASSES
+
+  for folder in folders:
+    t = folder
+    x = !ls $SOURCE_DIRECTORY$t
+    for i in x:
+      for j in re.split(r'[-;,\t\s]\s*', i):
+        if j == '':
+          continue
+        images.append({'Class':t,'Image':j})
+
+
+  # Partition Images into Training, Validation, and Testing
+  for c in folders:
+      os.makedirs(f'{TRAIN_DIRECTORY}{c}', exist_ok=True)
+      os.makedirs(f'{VALID_DIRECTORY}{c}', exist_ok=True)
+      os.makedirs(f'{TEST_DIRECTORY}{c}', exist_ok=True)
+
+  counter=0
+  for c in folders:
+      numOfFiles = len(next(os.walk(f'{SOURCE_DIRECTORY}{c}/'))[2])
+      for files in random.sample(glob(f'{SOURCE_DIRECTORY}{c}/*'), int(numOfFiles*TRAIN_SPLIT)):
+          shutil.move(files, f'{TRAIN_DIRECTORY}{c}')
+
+      for files in random.sample(glob(f'{SOURCE_DIRECTORY}{c}/*'), int(numOfFiles*VALID_SPLIT)):
+          shutil.move(files, f'{VALID_DIRECTORY}{c}')
+
+      for files in glob(f'{SOURCE_DIRECTORY}{c}/*'):
+          shutil.move(files, f'{TEST_DIRECTORY}{c}')
+      counter+=1
+
+  shutil.rmtree(SOURCE_DIRECTORY)
+
+  def build_model(measure_performance:bool = True):
+  ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+  train_batches = ImageDataGenerator(preprocessing_function=PREPROCESSING_METHOD).flow_from_directory(directory=TRAIN_DIRECTORY, target_size=IMAGE_SHAPE_2D, classes=CLASSES, batch_size=BATCH_SIZE)
+  valid_batches = ImageDataGenerator(preprocessing_function=PREPROCESSING_METHOD).flow_from_directory(directory=VALID_DIRECTORY, target_size=IMAGE_SHAPE_2D, classes=CLASSES, batch_size=BATCH_SIZE, shuffle=False)
+  test_batches =  ImageDataGenerator(preprocessing_function=PREPROCESSING_METHOD).flow_from_directory(directory=TEST_DIRECTORY, target_size=IMAGE_SHAPE_2D, classes=CLASSES, batch_size=BATCH_SIZE, shuffle=False)
+
+  input_shape = IMAGE_SHAPE_3D
+  nclass = len(CLASSES)
+  epoch = EPOCHS
+  base_model = BASE_MODEL
+  base_model.trainable = False
+
+  model = Sequential()
+  if len(BASE_MODEL(tf.zeros((1, *IMAGE_SHAPE_3D))).shape) == 4:
+      model.add(base_model)
+      model.add(Identity())
+      model.add(GlobalAveragePooling2D())
+      model.add(Dropout(0.2))
+      model.add(Dense(256, activation='relu'))
+      model.add(Dropout(0.2))
+      model.add(Dense(128, activation='relu'))
+      model.add(Dropout(0.2))
+      model.add(Dense(64, activation='relu'))
+      model.add(Dropout(0.2))
+      model.add(Dense(32, activation='relu'))
+      model.add(Dense(nclass, activation='softmax'))
+  else:
+      model.add(InputLayer(input_shape))
+      model.add(Rescaling(scale=1/127.5, offset=-1))
+      model.add(base_model)
+      model.add(Dense(512, activation='relu'))
+      model.add(Dropout(0.2))
+      model.add(Dense(256, activation='relu'))
+      model.add(Dropout(0.2))
+      model.add(Dense(128, activation='relu'))
+      model.add(Dropout(0.2))
+      model.add(Dense(64, activation='relu'))
+      model.add(Dropout(0.2))
+      model.add(Dense(nclass, activation='softmax'))
+
+  model.compile(optimizer=tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE), loss='categorical_crossentropy', metrics=['accuracy'])
+  es = EarlyStopping(monitor='val_loss', mode='auto', verbose=1 ,  patience = PATIENCE)
+
+  model.summary()
+
+  fitted_model= model.fit(x=train_batches, validation_data=valid_batches, epochs=epoch, callbacks=[es])
+  score, accuracy = model.evaluate(x=test_batches, batch_size=BATCH_SIZE)
+
+  print('\n')
+  print(Fore.GREEN + u'\n\u2713 ' + f'Loss ==> {score}')
+  print(Fore.GREEN + u'\n\u2713 ' + f'Accuracy ==> {accuracy}')
+
+  plt.rcParams["figure.figsize"] = (15,8)
+
+  if measure_performance:
+    plt.plot(fitted_model.history['accuracy'])
+    plt.plot(fitted_model.history['val_accuracy'])
+    plt.title('Model accuracy')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Epoch')
+    plt.legend(['Train', 'Valid'], loc='upper left')
+    plt.show()
+
+    plt.plot(fitted_model.history['loss'])
+    plt.plot(fitted_model.history['val_loss'])
+    plt.title('Model loss')
+    plt.ylabel('Loss')
+    plt.xlabel('Epoch')
+    plt.legend(['Train', 'Valid'], loc='upper left')
+    plt.show()
+
+    y_pred = model.predict(test_batches)
+
+    ax = sns.heatmap(confusion_matrix(test_batches.classes, y_pred.argmax(axis=1)), annot=True, cmap='Blues', fmt='g')
+    ax.set_title('Confusion Matrix')
+    ax.set_xlabel('Predicted Values')
+    ax.set_ylabel('Actual Values')
+    ax.xaxis.set_ticklabels(CLASSES)
+    ax.yaxis.set_ticklabels(CLASSES)
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
+    plt.show()
+return model
+
+def predict_image_class(img, model):
+  img = np.expand_dims(img, axis=0)
+  preprocessed_image = image_preprocess(img)
+  tensor = tf.convert_to_tensor(preprocessed_image, dtype=tf.float32)
+
+  print(Fore.GREEN + u'\n\u2713 ' + f'Model Output ==> {CLASSES[np.argmax(model.predict(tensor))]}')
+  print(Style.RESET_ALL)
+
+  #Show image
+  def show_image(img):
+  img = Image.fromarray(img)
+  display(img)
+
+  #url to image
+  def url_to_image(url):
+  image_url = tf.keras.utils.get_file(origin=url)
+  img = image.load_img(image_url, target_size=IMAGE_SHAPE_2D)
+  img = np.expand_dims(img, axis=0)
+  return np.vstack([img])[0]
+
+  #get image
+  def path_to_image(image_name = None):
+  for root, dirs, files in os.walk(REFACTORED_DIRECTORY):
+          if image_name in files:
+              image_name = os.path.join(root, image_name)
+              break
+
+  img = Image.open(image_name)
+  img = img.resize(IMAGE_SHAPE_2D)
+  img = np.expand_dims(img, axis=0)
+  return np.vstack([img])[0]
+
+  #implement image processing method
+  def image_preprocess(img):
+  return PREPROCESSING_METHOD(img)
+
+  #Implement Lime XAI
+  def explain_image_lime(img, model):
+  # Temporarily disable output stream, preventing unnecesarry output
+  with IgnorePrints():
+      preprocessedImage = image_preprocess(img)
+
+      explainer = lime_image.LimeImageExplainer()
+      explanation = explainer.explain_instance(np.asanyarray(preprocessedImage).astype('double'), model.predict, top_labels=5, hide_color=0, num_samples=1000)
+
+      temp, mask = explanation.get_image_and_mask(explanation.top_labels[0], positive_only=False, num_features=10, hide_rest=False)
+
+  return mark_boundaries(img, mask)
+
+def show_imgwithheat(img_path, heatmap, alpha=0.4):
+    img = cv2.imread(img_path)
+    heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
+    heatmap = (heatmap*255).astype("uint8")
+    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    superimposed_img = heatmap * alpha + img
+    superimposed_img = np.clip(superimposed_img, 0, 255).astype("uint8")
+    superimposed_img = cv2.cvtColor(superimposed_img, cv2.COLOR_BGR2RGB)
+
+    return superimposed_img
+
+    def explain_image_grad_cam(img, model):
+  assert len(model.layers[1].get_output_at(0).get_shape().as_list()) == 4, \
+    f'Expected the number of dimensions in the layer to be 4, ' \
+    f'found {len(model.layers[1].get_output_at(0).get_shape().as_list())}.'
+
+  image_path = './assets/buffer.jpg'
+
+  Image.fromarray(img).save(image_path)
+
+  img = preprocess_image(image_path, target_size=IMAGE_SHAPE_2D)
+  preprocessed_image = image_preprocess(img)
+
+  heatmap = grad_cam(
+    model, preprocessed_image,
+    layer_name = model.layers[1].name,
+  )
+
+  img_arr = show_imgwithheat(image_path, heatmap)
+
+  os.remove(image_path)
+
+  return img_arr
+
+  def explain_image_grad_cam_plus_plus(img, model):
+  assert len(model.layers[1].get_output_at(0).get_shape().as_list()) == 4, \
+    f'Expected the number of dimensions in the layer to be 4, ' \
+    f'found {len(model.layers[1].get_output_at(0).get_shape().as_list())}.'
+
+  image_path = './assets/buffer.jpg'
+
+  Image.fromarray(img).save(image_path)
+
+  img = preprocess_image(image_path, target_size=IMAGE_SHAPE_2D)
+  preprocessed_image = image_preprocess(img)
+
+  heatmap = grad_cam_plus(
+    model, preprocessed_image,
+    layer_name = model.layers[1].name,
+  )
+
+  show_imgwithheat(image_path, heatmap)
+
+  img_arr = show_imgwithheat(image_path, heatmap)
+
+  os.remove(image_path)
+
+  return img_arr
+
+  def plot_XAI(img, model):
+  plt.rcParams["figure.figsize"] = (10,10)
+  fig, ax = plt.subplots(2,2)
+  ax[0,0].imshow(img)
+  ax[0,1].imshow(explain_image_lime(img, model))
+  ax[1,0].imshow(explain_image_grad_cam(img, model))
+  ax[1,1].imshow(explain_image_grad_cam_plus_plus(img, model))
+
+  ax[0, 0].set_title("Original Image")
+  ax[0, 1].set_title("LIME")
+  ax[1, 0].set_title("Grad-CAM")
+  ax[1, 1].set_title("Grad-CAM++")
+
+  fig.tight_layout()
+  plt.show()
+  plt.rcParams["figure.figsize"] = (15,8)
+
+  os.environ['PYTHONHASHSEED'] = str(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
+tf.random.set_seed(SEED)
+
+load_dataset()
+prime_dataset()
+model = build_model(measure_performance=True)
+
+img = url_to_image('https://www.enr.com/ext/resources/News/2016/September/north_carolina_hurricane_matthew.jpg')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('05_01_1225.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('04_01_0005.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('06_02_2615.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('06_03_1742.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('06_04_0780.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('01_01_0363.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('03_0005.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+img = path_to_image('01_02_0471.png')
+plot_XAI(img, model)
+predict_image_class(img, model)
+
+
+    
+
+  
+
+
+
+
+
  
-1.	Convolutional Layers:
-VGG-16 comprises 13 convolutional layers arranged sequentially. The layers consist of 3x3 convolutional filters based on the rectified linear unit (ReLU) activation function. The use of multiple  layers allows VGG-16 to capture more complex features in the input image.
-Max Pooling Layers:
-VGG-16 uses max pooling with a 2x2 window and 2 steps, resulting in a 2-fold undersampling of the feature map.
-
-2.	Fully Connected Layers:
- These  layers combine the spatial information obtained from the convolution process and combine them to make high-level decisions about the input image. The fully connected layers enable VGG-16 to capture complex relationships between features and perform fine-grained classification.
-
-3.	Softmax Layer: 
-VGG-16 allows making predictions on input images by creating probability distributions for different classes using the softmax function.. By applying the softmax function, VGG-16 produces a probability distribution over the different classes, enabling it to make predictions about the input image.
-
-4.	Uniform Architecture:
- One of the distinctive features of VGG-16 is its uniform architecture, where the convolutional layers consist of multiple 3x3 filters stacked on top of each other. This design principle simplifies the architecture and makes it easier to understand and implement. Despite its simplicity, VGG-16 Despite its simplicity, VGG-16 has demonstrated excellent performance in image classification, including object recognition and medical image analysis..
-
-3.2 Using ResNet50 
-ResNet50 and ResNet101 represent pivotal milestones in the evolution of convolutional neural network (CNN) architectures, particularly renowned for their innovative use of residual connections. In this section, we explore the architectural intricacies of ResNet50 .
-
-Convolutional Layers:
-The ResNet50 design integrates residual blocks, each comprising multiple convolutional layers. These blocks introduce skip connections, enabling the network to bypass specific layers and address the vanishing gradient issue. By doing so, the residual blocks aid in capturing more complex features within the input images.
-
-Conv(x) = ReLU(W * x + b)
-
-
-Max Pooling Layers:	
-Both ResNet50 architecture employ max pooling layers with a similar configuration to VGG-16, aiding in spatial dimension reduction while preserving essential features.
-
-Fully Connected Layers:
-ResNet50 architecture ResNet50 architecture incorporates fully connected layers at the network's conclusion, resembling VGG-16. These layers integrate initial information gleaned from the convolutional layers and facilitate high-level decision-making by leveraging learned features.
-
-FC(x) = ReLU(Wx + b)
-
-
-Softmax Layer: 
-A softmax layer is typically appended to the final fully connected layer in ResNet50 and ResNet101 architectures. This layer computes class probabilities, allowing the network to make predictions about the input image
-
-
- 3.3. Using VGG19
-VGG19 is a convolutional neural network (CNN) architecture that builds upon the VGG16 model with the addition of three extra convolutional layers. Created by Simonyan and Zisserman in 2014, VGG19 is celebrated for its straightforward design and its success in image classification tasks. Let's explore the structure and components of VGG19:
-1.	Convolutional Layers:
-VGG19 consists of 16 convolutional layers arranged in blocks. These layers utilize 3x3 filters with a stride of 1 and zero padding, allowing the network to capture detailed features from input images. The successive convolutional layers facilitate the learning of hierarchical representations of visual patterns with increasing complexity.
-2.	Activation Functions:
-Following each convolutional layer in VGG19, rectified linear unit (ReLU) activation functions are applied. ReLU introduces non-linearity into the network by substituting negative pixel values with zero, which helps in feature extraction and improves the network's capability to comprehend intricate relationships within the data.
-
-3.	Max Pooling Layers:
- Between the convolutional layers, there are five max pooling layers. Max pooling aids in diminishing the spatial dimensions of the feature maps, thus enhancing the network's computational efficiency while retaining crucial features.
-
-
-Towards the end of the network, VGG19 incorporates three fully connected layers, also referred to as dense layers. These layers amalgamate the spatial information extracted by the convolutional layers and synthesize it to form high-level judgments about the input image. Fully connected layers establish connections between every neuron in one layer to every neuron in the succeeding layer, facilitating intricate feature amalgamations and classifications.
-4.	Softmax Layer:
-The ultimate layer of VGG19 comprises a softmax layer, responsible for transforming the raw output from the preceding fully connected layer into probabilities for each class. By applying the softmax function, VGG19 produces a probability distribution over the different classes, enabling it to make predictions about the input image.
- 
-Figure 5. VGG19 Architecture
-In essence, VGG19 is distinguished by its profound architecture, encompassing numerous convolutional layers succeeded by fully connected layers and a softmax output layer. Leveraging its hierarchical feature learning abilities, VGG19 has showcased outstanding performance in image classification assignments, rendering it a favored option for diverse computer vision applications.
- 
- 
-3.6. Using Inception-V3
-Inception-v3 is renowned for its efficiency and accuracy in image classification tasks. Let's explore the architecture and layers of Inception-v3:
-1.	Stem Block:
-Inception-v3 begins with a stem block, which serves as the initial feature extraction module. The stem block usually comprises multiple convolutional layers, batch normalization, and activation functions like ReLU. This module extracts low-level features from the input image and prepares it for further processing.
-
-2.	Inception Blocks:
-The heart of the Inception-v3 architecture comprises several inception blocks, tasked with extracting hierarchical features from the input data. Each inception block contains parallel pathways, termed inception modules, that execute convolutions with different kernel sizes to capture features across diverse spatial scales. Furthermore, these blocks integrate dimensionality reduction methods, such as 1x1 convolutions, to decrease computational complexity while retaining essential features.
-3.	Inception Modules:
- Within every inception block, multiple inception modules are arranged. These modules consist of parallel convolutional layers employing various filter sizes, allowing the network to grasp features at diverse spatial resolutions ,.Additionally, the modules incorporate pooling operations and concatenation layers to aggregate information from multiple pathways.
-4.	Reduction Blocks:
-  At specific intervals within the network, Inception-v3 includes reduction blocks. These blocks serve to downsample  This down sampling reduces the computational burden and improving the efficiency of the network.
-Output = Input + BlockOutput
-
-5.	Auxiliary Classifiers:
-This model may also incorporate classifiers, which are additional branches connected to intermediate layers of the network. These classifiers aid in training by providing additional supervision signals during the training process. By incorporating auxiliary classifiers, Inception-v3 encourages the propagation of gradients through the network, facilitating more stable and efficient training.
-6.	Global Average Pooling and Softmax Layer: Nearing the conclusion of the network, Inception-v3 commonly integrates a global average pooling layer succeeded by a softmax layer. The global average pooling layer consolidates feature maps across spatial dimensions, condensing them into a one-dimensional vector. Following this, the softmax layer transforms the vector into a probability distribution across the various classes, facilitating the network in generating predictions.
-                                                     
- In essence, Inception-v3 is distinguished by its effective and adaptable architecture, utilizing parallel convolutional pathways and dimensionality reduction methods to attain cutting-edge performance in image classification endeavors. By integrating inventive architectural components, Inception-v3 has exhibited notable precision and effectiveness, establishing itself as a prominent selection for diverse computer vision applications.
- 
- 
-3.8. Using EfficientNetB1
-EfficientNetB1 is a convolutional neural network (CNN) architecture developed by Tan and Le in 2019 as a component of the EfficientNet model series. Its aim is to attain top-notch performance in image classification missions while upholding computational efficiency.. EfficientNetB1 represents the baseline model in the EfficientNet series, with progressively larger versions denoted by higher numerical suffixes (e.g., EfficientNetB2, EfficientNetB3, etc.). Let's explore the architecture and layers of EfficientNetB1:
-1.	Stem Convolutional Layer:
- EfficientNetB1 begins with a stem convolutional layer, which serves as the initial feature extraction module. This layer typically consists of a series of convolutional operations, batch normalization, and activation functions such as Swish. The stem layer extracts low-level features from the input image and prepares it for further processing.
-2.	Efficient Blocks:
-The core of EfficientNetB1 architecture comprises multiple efficient blocks, also known as MBConv blocks. These blocks are based on mobile inverted bottleneck convolution (MBConv) operations, which optimize both accuracy and efficiency. Each MBConv block consists of depthwise separable convolutions, followed by expansion and squeeze operations, which enhance feature representation while reducing computational cost.
-3.	Depthwise Separable Convolutions:
-Within each efficient block, depthwise separable convolutions are employed to perform spatial convolutions with significantly fewer parameters compared to traditional convolutional layers. This separable convolutional strategy reduces both computational complexity and memory footprint, making EfficientNetB1 highly efficient.
-4.	Squeeze-and-Excitation (SE) Blocks:
-In addition to efficient blocks, EfficientNetB1 incorporates squeeze-and-excitation (SE) blocks at specific intervals within the network. SE blocks aim to grasp dependencies between channels and dynamically recalibrate feature maps according to their significance, 
-5.	Global Pooling and Softmax Layer: Towards Nearing the conclusion of the network, EfficientNetB1 usually incorporates global average pooling, succeeded by a softmax layer. This pooling operation aggregates feature maps across spatial dimensions, condensing them into a one-dimensional vector. Following this, the softmax layer transforms the vector into a probability distribution across various classes, facilitating the network in generating predictions.
